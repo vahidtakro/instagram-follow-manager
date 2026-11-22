@@ -41,6 +41,7 @@ DEFAULT_SETTINGS = {
     "story_max": 9.0,
     "watch_reels": True,
     "watch_stories": False,
+    "log_side": "Right",
     "history_mode": "cancel",
     "search": "",
     "status_filter": "all",
@@ -84,6 +85,7 @@ class App(tk.Tk):
         self.story_max_var = tk.DoubleVar(value=DEFAULT_SETTINGS["story_max"])
         self.watch_reels_var = tk.BooleanVar(value=DEFAULT_SETTINGS["watch_reels"])
         self.watch_stories_var = tk.BooleanVar(value=DEFAULT_SETTINGS["watch_stories"])
+        self.log_side_var = tk.StringVar(value=DEFAULT_SETTINGS["log_side"])
         self.history_mode_var = tk.StringVar(value=DEFAULT_SETTINGS["history_mode"])
         self.search_var = tk.StringVar(value=DEFAULT_SETTINGS["search"])
         self.status_filter_var = tk.StringVar(value=DEFAULT_SETTINGS["status_filter"])
@@ -94,8 +96,10 @@ class App(tk.Tk):
         # Save on every change so settings survive a close, crash or quit.
         for var in self._settings_vars().values():
             var.trace_add("write", self._settings_changed)
+        self.log_side_var.trace_add("write", self._apply_log_layout)
 
         self._build()
+        self._apply_log_layout()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(120, self._poll_events)
         self._log("Ready. Load a .txt or .json file, review the list, then press Start.")
@@ -140,7 +144,13 @@ class App(tk.Tk):
         self._build_about_tab()
 
     def _build_run_tab(self) -> None:
-        top = ttk.LabelFrame(self.run_tab, text="1. Task and input", padding=10)
+        self.run_paned = ttk.PanedWindow(self.run_tab, orient="horizontal")
+        self.run_paned.pack(fill="both", expand=True, padx=4, pady=4)
+        self.controls_panel = ttk.Frame(self.run_paned, padding=(4, 0))
+        self.log_frame = ttk.LabelFrame(self.run_paned, text="Live log", padding=4)
+        self.run_paned.add(self.controls_panel, weight=3)
+
+        top = ttk.LabelFrame(self.controls_panel, text="1. Task and input", padding=10)
         top.pack(fill="x", padx=8, pady=6)
 
         ttk.Label(top, text="Task:").grid(row=0, column=0, sticky="w")
@@ -160,7 +170,7 @@ class App(tk.Tk):
         self.file_info = ttk.Label(top, text="No file loaded")
         self.file_info.grid(row=2, column=1, columnspan=3, sticky="w", pady=(6, 0))
 
-        preview = ttk.LabelFrame(self.run_tab, text="Username preview", padding=6)
+        preview = ttk.LabelFrame(self.controls_panel, text="Username preview", padding=6)
         preview.pack(fill="both", expand=False, padx=8, pady=6)
         self.preview_list = tk.Listbox(preview, height=6, activestyle="none")
         scroll = ttk.Scrollbar(preview, orient="vertical", command=self.preview_list.yview)
@@ -172,7 +182,7 @@ class App(tk.Tk):
         ttk.Button(preview_actions, text="Remove selected",
                    command=self._remove_selected).pack(side="left")
 
-        opts = ttk.LabelFrame(self.run_tab, text="2. Settings", padding=10)
+        opts = ttk.LabelFrame(self.controls_panel, text="2. Settings", padding=10)
         opts.pack(fill="x", padx=8, pady=6)
 
         ttk.Checkbutton(opts, text="Dry run (no clicks)", variable=self.dry_var).grid(row=0, column=0, sticky="w")
@@ -202,9 +212,15 @@ class App(tk.Tk):
         ttk.Label(opts, text="Settings are saved automatically and restored on next launch.").grid(
             row=5, column=3, columnspan=3, sticky="w", pady=(8, 0)
         )
+        ttk.Label(opts, text="Live log side:").grid(row=6, column=0, sticky="w", pady=(6, 0))
+        ttk.Combobox(opts, textvariable=self.log_side_var, values=["Right", "Left"],
+                     state="readonly", width=10).grid(row=6, column=1, sticky="w", pady=(6, 0))
+        ttk.Label(opts, text="Drag the divider between the log and the controls to resize.").grid(
+            row=6, column=2, columnspan=4, sticky="w", pady=(6, 0)
+        )
         opts.columnconfigure(1, weight=1)
 
-        social = ttk.LabelFrame(self.run_tab, text="3. Human-paced behaviour (feed / reels / stories)", padding=10)
+        social = ttk.LabelFrame(self.controls_panel, text="3. Human-paced behaviour (feed / reels / stories)", padding=10)
         social.pack(fill="x", padx=8, pady=6)
         ttk.Label(social, text="Like chance %:").grid(row=0, column=0, sticky="w")
         ttk.Spinbox(social, from_=0, to=100, textvariable=self.like_chance_var, width=7).grid(row=0, column=1, sticky="w")
@@ -221,7 +237,7 @@ class App(tk.Tk):
         ttk.Label(social, text="Tip: load a .txt of usernames to restrict likes to those authors. "
                               "Leave it empty to like any feed post.").grid(row=2, column=0, columnspan=7, sticky="w", pady=(6, 0))
 
-        controls = ttk.LabelFrame(self.run_tab, text="4. Control", padding=10)
+        controls = ttk.LabelFrame(self.controls_panel, text="4. Control", padding=10)
         controls.pack(fill="x", padx=8, pady=6)
         self.start_btn = ttk.Button(controls, text="Start", command=self._start)
         self.pause_btn = ttk.Button(controls, text="Pause", command=self._pause)
@@ -232,25 +248,25 @@ class App(tk.Tk):
                                  self.stop_btn, self.reset_btn)):
             btn.grid(row=0, column=i, padx=4)
 
-        status_frame = ttk.Frame(self.run_tab)
+        status_frame = ttk.Frame(self.controls_panel)
         status_frame.pack(fill="x", padx=8, pady=4)
         self.status_label = ttk.Label(status_frame, text="Status: idle")
         self.status_label.pack(side="left")
         self.current_label = ttk.Label(status_frame, text="")
         self.current_label.pack(side="right")
-        self.progress = ttk.Progressbar(self.run_tab, mode="determinate", maximum=100)
+        self.progress = ttk.Progressbar(self.controls_panel, mode="determinate", maximum=100)
         self.progress.pack(fill="x", padx=8, pady=4)
 
-        log_frame = ttk.LabelFrame(self.run_tab, text="Live log", padding=4)
-        log_frame.pack(fill="both", expand=True, padx=8, pady=6)
-        self.log_text = tk.Text(log_frame, height=12, wrap="none", font="TkFixedFont")
-        log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
+        # The log lives in its own pane so long runs never push it off-screen.
+        self.log_text = tk.Text(self.log_frame, height=12, wrap="word", font="TkFixedFont")
+        log_scroll = ttk.Scrollbar(self.log_frame, orient="vertical", command=self.log_text.yview)
         self.log_text.config(yscrollcommand=log_scroll.set)
         self.log_text.pack(side="left", fill="both", expand=True)
         log_scroll.pack(side="right", fill="y")
         self.log_text.tag_config("error", foreground="#c0392b")
         self.log_text.tag_config("good", foreground="#1e8449")
         self.log_text.tag_config("warn", foreground="#b9770e")
+        self.run_paned.add(self.log_frame, weight=1)
 
     def _build_history_tab(self) -> None:
         bar = ttk.Frame(self.history_tab)
@@ -336,7 +352,9 @@ class App(tk.Tk):
             "  They are local only and never uploaded.\n"
             "  Use 'Reset settings to default' in Settings to start fresh.\n"
             "  The History table can be sorted by any column heading, and\n"
-            "  'Clear table' deletes the saved rows for the selected task.\n\n"
+            "  'Clear table' deletes the saved rows for the selected task.\n"
+            "  Use 'Live log side' in Settings to put the log on the left or\n"
+            "  right; drag the divider between the panes to resize it.\n\n"
             "DISCLAIMER\n"
             "  Browser automation may violate Instagram's Terms of Use and can\n"
             "  lead to temporary restrictions. Use at your own risk.\n\n"
@@ -346,6 +364,15 @@ class App(tk.Tk):
         widget.insert("1.0", text)
         widget.config(state="disabled")
         widget.pack(fill="both", expand=True)
+
+    def _apply_log_layout(self, *_args) -> None:
+        """Place the live log in a left or right sidebar (never below the controls)."""
+        if not hasattr(self, "run_paned"):
+            return
+        if str(self.log_frame) in [str(child) for child in self.run_paned.panes()]:
+            self.run_paned.forget(self.log_frame)
+        position = 0 if self.log_side_var.get() == "Left" else "end"
+        self.run_paned.insert(position, self.log_frame, weight=1)
 
     # ------------------------------------------------------------ settings
     def _settings_vars(self) -> dict[str, tk.Variable]:
@@ -371,6 +398,7 @@ class App(tk.Tk):
             "story_max": self.story_max_var,
             "watch_reels": self.watch_reels_var,
             "watch_stories": self.watch_stories_var,
+            "log_side": self.log_side_var,
             "history_mode": self.history_mode_var,
             "search": self.search_var,
             "status_filter": self.status_filter_var,

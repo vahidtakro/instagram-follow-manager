@@ -44,7 +44,7 @@ Download the `.deb` from the [Releases](https://github.com/vahidtakro/instagram-
 git clone https://github.com/vahidtakro/instagram-follow-manager.git
 cd instagram-follow-manager
 bash packaging/build_deb.sh
-sudo apt install ./dist/instagram-follow-manager_1.1.3_all.deb
+sudo apt install ./dist/instagram-follow-manager_1.1.4_all.deb
 ```
 
 This creates an **Instagram Follow Manager** entry in your applications menu, plus two commands:
@@ -90,7 +90,7 @@ python app.py
 5. Open the **History** tab to review what was liked, watched or skipped, and export a CSV.
 6. When satisfied, uncheck **Dry run**, confirm, and run a small batch.
 
-Settings are saved automatically and restored the next time you open the app. **Reset settings to default** (in the Settings box) restores every field to its starting value; it does not delete task history. In the **History** tab you can click any column heading to sort by it, and **Clear table** deletes all saved rows for the selected task after confirmation.
+Settings are saved automatically and restored the next time you open the app. **Reset settings to default** (in the Settings box) restores every field to its starting value; it does not delete task history. The **Live log** is a sidebar beside the controls — use **Live log side** (Right/Left) in Settings to choose which side, and drag the divider to resize it. In the **History** tab you can click any column heading to sort by it, and **Clear table** deletes all saved rows for the selected task after confirmation.
 
 The **Engage** task visits the home feed first, then (optionally) reels. It spends a variable time on each post, likes only a percentage, scrolls irregularly and moves the mouse occasionally. **Watch stories** picks authors in random order, skips some stories early and watches others for a random duration, then moves to the next person when their stories end.
 
