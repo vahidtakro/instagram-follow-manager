@@ -297,6 +297,13 @@ class Engine:
                     self._reel_pass(driver, state, counts, total - done, guard_ok, wait, record)
         finally:
             self.emit("progress", done, total)
+            if not aborted and done < total and not self._stop.is_set():
+                self.emit(
+                    "log",
+                    f"Only {done} new item(s) were available (target {total}). "
+                    "Instagram has limited fresh content and each author is only "
+                    "handled once per state file - reset this task's state or try again later.",
+                )
         return counts, done, aborted, reason
 
     def _story_pass(self, driver, state, counts, cap, guard_ok, wait, record) -> int:
@@ -386,17 +393,17 @@ class Engine:
         seen: set[str] = set()
         done = 0
         idle_rounds = 0
-        while done < cap and not self._stop.is_set() and idle_rounds < 4:
+        reloads = 0
+        iterations = 0
+        max_iterations = cap * 3 + 40
+        while (done < cap and not self._stop.is_set() and idle_rounds < 8
+               and reloads < 4 and iterations < max_iterations):
             if not self._wait_while_paused() or not guard_ok():
                 break
+            iterations += 1
             posts = [p for p in social.feed_posts(driver)
                      if p.get("postId") and p.get("author") and p["postId"] not in seen]
-            if not posts:
-                social.scroll_feed(driver)
-                self._sleep(random.uniform(1.0, 2.6))
-                idle_rounds += 1
-                continue
-            idle_rounds = 0
+            before_round = done
             for post in posts:
                 if done >= cap or self._stop.is_set() or not self._wait_while_paused():
                     break
@@ -432,8 +439,26 @@ class Engine:
                 done += 1
                 if random.random() < 0.08:
                     self._sleep(random.uniform(1.5, 3.0))
-            social.scroll_feed(driver)
-            self._sleep(random.uniform(1.0, 2.5))
+            if done == before_round:
+                # Posts may have been present but all were already in history /
+                # outside the allowlist. That is still a stalled round.
+                idle_rounds += 1
+                social.scroll_feed(driver, strong=idle_rounds >= 3)
+                self._sleep(random.uniform(1.2, 2.8))
+                if idle_rounds >= 4 and reloads < 4:
+                    self.emit("log", "Feed has no new posts - reloading home to fetch more...")
+                    driver.get("https://www.instagram.com/")
+                    self._sleep(2.5)
+                    if not guard_ok():
+                        break
+                    reloads += 1
+                    idle_rounds = 0
+            else:
+                idle_rounds = 0
+                social.scroll_feed(driver)
+                self._sleep(random.uniform(1.0, 2.5))
+        if done < cap:
+            self.emit("log", f"Feed: no further new posts available after {done} item(s).")
         return done
 
     def _reel_pass(self, driver, state, counts, cap, guard_ok, wait, record) -> int:
@@ -444,9 +469,11 @@ class Engine:
         driver.get("https://www.instagram.com/reels/")
         self._sleep(3.0)
         done = 0
+        stall = 0
         for _ in range(cap):
             if self._stop.is_set() or not self._wait_while_paused() or not guard_ok():
                 break
+            before = done
             info = social.active_reel(driver)
             if not info:
                 self.emit("log", "No reel detected.")
@@ -456,6 +483,11 @@ class Engine:
                 if not social.next_reel(driver):
                     break
                 self._sleep(random.uniform(0.6, 1.4))
+                # Count skipped reels too; the feed is infinite but variety is not.
+                stall += 1
+                if stall >= 30:
+                    self.emit("log", "Reels: too many already-seen authors - moving on.")
+                    break
                 continue
             self.emit("current", author, done + 1, cap)
             dwell = self._human_wait(opt.dwell_min, opt.dwell_max)
@@ -483,4 +515,13 @@ class Engine:
             if not social.next_reel(driver):
                 break
             self._sleep(random.uniform(0.8, 1.8))
+            if done == before:
+                stall += 1
+                if stall >= 30:
+                    self.emit("log", "Reels: no new authors found - moving on.")
+                    break
+            else:
+                stall = 0
+        if done < cap:
+            self.emit("log", f"Reels: no further new reels available after {done} item(s).")
         return done

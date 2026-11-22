@@ -258,9 +258,17 @@ def wander_mouse(driver, steps: int | None = None) -> None:
         pass
 
 
-def scroll_feed(driver) -> None:
-    """Scroll a variable amount, occasionally nudging back slightly."""
+def scroll_feed(driver, strong: bool = False) -> None:
+    """Scroll a variable amount, occasionally nudging back slightly.
+
+    strong=True pushes near the bottom to make Instagram lazy-load more posts.
+    """
     try:
+        if strong:
+            driver.execute_script(
+                "window.scrollTo({top:document.body.scrollHeight*0.85,behavior:'smooth'});"
+            )
+            return
         amount = random.randint(420, 900)
         if random.random() < 0.15:
             amount = -random.randint(120, 260)

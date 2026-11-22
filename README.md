@@ -44,7 +44,7 @@ Download the `.deb` from the [Releases](https://github.com/vahidtakro/instagram-
 git clone https://github.com/vahidtakro/instagram-follow-manager.git
 cd instagram-follow-manager
 bash packaging/build_deb.sh
-sudo apt install ./dist/instagram-follow-manager_1.1.1_all.deb
+sudo apt install ./dist/instagram-follow-manager_1.1.2_all.deb
 ```
 
 This creates an **Instagram Follow Manager** entry in your applications menu, plus two commands:
@@ -178,6 +178,7 @@ legacy/                     original standalone scripts
 - **The batch size is editable.** The **Max items this run** field (default 50 for social tasks, 20/15 for the cleanup tasks) is a per-run target, not a hard cap — set it to 100, 200 or more if you want. In the CLI use `--limit N`. Likes are still rate-limited: keep **Like chance** modest (20–40%) and grow batches gradually.
 - Instagram swaps the story tray as stories are consumed. The watcher re-reads it when the viewer closes, so it can keep going past one person's stories instead of stopping early.
 - The social modes store one entry per author, so an author is never engaged twice until you reset that task's state. That also means re-running a social task mostly does nothing until you reset or switch task.
+- **A large limit is a target, not a guarantee.** The app stops when Instagram has no new posts/stories/reels left for that session, and it now says so in the log (and reloads the feed a few times first). At default viewing times, 500 items is already several hours — work in sessions of 20–100 and wait for fresh content between them.
 - If a run stops with `abort`, that username is not marked done — it will be retried on the next run.
 - Use **Retry errors / unavailable** to re-check entries that failed or looked disabled.
 - Clear a task's history with **Reset state** in the GUI or `--reset-state` in the CLI.
