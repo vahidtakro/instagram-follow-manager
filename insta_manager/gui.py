@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import queue
 import subprocess
@@ -17,6 +18,34 @@ from .state import StateStore
 STATE_DIR = Path.home() / ".instagram-follow-manager"
 GITHUB_URL = "https://github.com/vahidtakro/instagram-follow-manager"
 
+# Single source of truth for startup values and the "Reset settings" button.
+DEFAULT_SETTINGS = {
+    "mode": "cancel",
+    "file": "",
+    "profile": str(Path.home() / ".config" / "chrome-instagram"),
+    "cdp": "",
+    "driver": "",
+    "random": True,
+    "dry": True,
+    "headless": False,
+    "restart": True,
+    "retry": False,
+    "limit": 20,
+    "min_delay": 25.0,
+    "max_delay": 45.0,
+    "like_chance": 35,
+    "dwell_min": 4.0,
+    "dwell_max": 12.0,
+    "skip_chance": 30,
+    "story_min": 3.0,
+    "story_max": 9.0,
+    "watch_reels": True,
+    "watch_stories": False,
+    "history_mode": "cancel",
+    "search": "",
+    "status_filter": "all",
+}
+
 
 class App(tk.Tk):
     def __init__(self):
@@ -31,38 +60,50 @@ class App(tk.Tk):
         self.warnings: list[str] = []
         self.state_dir = STATE_DIR
         self.state_dir.mkdir(parents=True, exist_ok=True)
+        self.settings_path = self.state_dir / "settings.json"
 
-        self.mode_var = tk.StringVar(value="cancel")
-        self.file_var = tk.StringVar()
-        self.profile_var = tk.StringVar(value=str(Path.home() / ".config" / "chrome-instagram"))
-        self.cdp_var = tk.StringVar()
-        self.driver_var = tk.StringVar()
-        self.random_var = tk.BooleanVar(value=True)
-        self.dry_var = tk.BooleanVar(value=True)
-        self.headless_var = tk.BooleanVar(value=False)
-        self.restart_var = tk.BooleanVar(value=True)
-        self.retry_var = tk.BooleanVar(value=False)
-        self.limit_var = tk.IntVar(value=20)
-        self.min_var = tk.DoubleVar(value=25.0)
-        self.max_var = tk.DoubleVar(value=45.0)
+        self.mode_var = tk.StringVar(value=DEFAULT_SETTINGS["mode"])
+        self.file_var = tk.StringVar(value=DEFAULT_SETTINGS["file"])
+        self.profile_var = tk.StringVar(value=DEFAULT_SETTINGS["profile"])
+        self.cdp_var = tk.StringVar(value=DEFAULT_SETTINGS["cdp"])
+        self.driver_var = tk.StringVar(value=DEFAULT_SETTINGS["driver"])
+        self.random_var = tk.BooleanVar(value=DEFAULT_SETTINGS["random"])
+        self.dry_var = tk.BooleanVar(value=DEFAULT_SETTINGS["dry"])
+        self.headless_var = tk.BooleanVar(value=DEFAULT_SETTINGS["headless"])
+        self.restart_var = tk.BooleanVar(value=DEFAULT_SETTINGS["restart"])
+        self.retry_var = tk.BooleanVar(value=DEFAULT_SETTINGS["retry"])
+        self.limit_var = tk.IntVar(value=DEFAULT_SETTINGS["limit"])
+        self.min_var = tk.DoubleVar(value=DEFAULT_SETTINGS["min_delay"])
+        self.max_var = tk.DoubleVar(value=DEFAULT_SETTINGS["max_delay"])
         # Human-paced social settings
-        self.like_chance_var = tk.IntVar(value=35)
-        self.dwell_min_var = tk.DoubleVar(value=4.0)
-        self.dwell_max_var = tk.DoubleVar(value=12.0)
-        self.skip_chance_var = tk.IntVar(value=30)
-        self.story_min_var = tk.DoubleVar(value=3.0)
-        self.story_max_var = tk.DoubleVar(value=9.0)
-        self.watch_reels_var = tk.BooleanVar(value=True)
-        self.watch_stories_var = tk.BooleanVar(value=False)
-        self.history_mode_var = tk.StringVar(value="cancel")
-        self.search_var = tk.StringVar()
-        self.status_filter_var = tk.StringVar(value="all")
+        self.like_chance_var = tk.IntVar(value=DEFAULT_SETTINGS["like_chance"])
+        self.dwell_min_var = tk.DoubleVar(value=DEFAULT_SETTINGS["dwell_min"])
+        self.dwell_max_var = tk.DoubleVar(value=DEFAULT_SETTINGS["dwell_max"])
+        self.skip_chance_var = tk.IntVar(value=DEFAULT_SETTINGS["skip_chance"])
+        self.story_min_var = tk.DoubleVar(value=DEFAULT_SETTINGS["story_min"])
+        self.story_max_var = tk.DoubleVar(value=DEFAULT_SETTINGS["story_max"])
+        self.watch_reels_var = tk.BooleanVar(value=DEFAULT_SETTINGS["watch_reels"])
+        self.watch_stories_var = tk.BooleanVar(value=DEFAULT_SETTINGS["watch_stories"])
+        self.history_mode_var = tk.StringVar(value=DEFAULT_SETTINGS["history_mode"])
+        self.search_var = tk.StringVar(value=DEFAULT_SETTINGS["search"])
+        self.status_filter_var = tk.StringVar(value=DEFAULT_SETTINGS["status_filter"])
+
+        self._sort_col = "time"
+        self._sort_reverse = True
+        self._load_settings()
+        # Save on every change so settings survive a close, crash or quit.
+        for var in self._settings_vars().values():
+            var.trace_add("write", self._settings_changed)
 
         self._build()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(120, self._poll_events)
         self._log("Ready. Load a .txt or .json file, review the list, then press Start.")
-        self._refresh_history()
+        saved_file = self.file_var.get().strip()
+        if saved_file and Path(saved_file).is_file():
+            self._load_input()
+        else:
+            self._refresh_history()
 
     # ---------------------------------------------------------------- UI
     def _build(self) -> None:
@@ -154,6 +195,13 @@ class App(tk.Tk):
         ttk.Entry(opts, textvariable=self.cdp_var, width=22).grid(row=3, column=1, sticky="w", pady=(6, 0))
         ttk.Label(opts, text="ChromeDriver path (auto if blank):").grid(row=4, column=0, sticky="w", pady=(6, 0))
         ttk.Entry(opts, textvariable=self.driver_var, width=58).grid(row=4, column=1, columnspan=3, sticky="ew", pady=(6, 0))
+        self.reset_settings_btn = ttk.Button(
+            opts, text="Reset settings to default", command=self._reset_settings
+        )
+        self.reset_settings_btn.grid(row=5, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        ttk.Label(opts, text="Settings are saved automatically and restored on next launch.").grid(
+            row=5, column=3, columnspan=3, sticky="w", pady=(8, 0)
+        )
         opts.columnconfigure(1, weight=1)
 
         social = ttk.LabelFrame(self.run_tab, text="3. Human-paced behaviour (feed / reels / stories)", padding=10)
@@ -211,7 +259,9 @@ class App(tk.Tk):
         ttk.Combobox(bar, textvariable=self.history_mode_var, values=list(MODES),
                      state="readonly", width=38).pack(side="left", padx=4)
         ttk.Button(bar, text="Refresh", command=self._refresh_history).pack(side="left", padx=8)
-        ttk.Button(bar, text="Export CSV...", command=self._export_csv).pack(side="left")
+        self.clear_table_btn = ttk.Button(bar, text="Clear table", command=self._clear_history_table)
+        self.clear_table_btn.pack(side="left")
+        ttk.Button(bar, text="Export CSV...", command=self._export_csv).pack(side="left", padx=6)
         ttk.Button(bar, text="Open folder", command=self._open_state_folder).pack(side="left", padx=6)
         ttk.Label(bar, text="Search:").pack(side="left", padx=(12, 2))
         ttk.Entry(bar, textvariable=self.search_var, width=24).pack(side="left")
@@ -227,14 +277,19 @@ class App(tk.Tk):
         tree_frame.pack(fill="both", expand=True, padx=8, pady=6)
         columns = ("username", "status", "detail", "time")
         self.history_tree = ttk.Treeview(tree_frame, columns=columns, show="headings", height=18)
-        for col, heading, width in (
-            ("username", "Username", 230),
-            ("status", "Status", 220),
-            ("detail", "Detail", 350),
-            ("time", "Time (UTC)", 190),
+        self.history_headings = {
+            "username": "Username", "status": "Status",
+            "detail": "Detail", "time": "Time (UTC)",
+        }
+        for col, width in (
+            ("username", 230), ("status", 220), ("detail", 350), ("time", 190),
         ):
-            self.history_tree.heading(col, text=heading)
+            self.history_tree.heading(
+                col, text=self.history_headings[col],
+                command=lambda c=col: self._set_history_sort(c),
+            )
             self.history_tree.column(col, width=width, anchor="w")
+        self._update_history_headings()
         tscroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self.history_tree.yview)
         self.history_tree.config(yscrollcommand=tscroll.set)
         self.history_tree.pack(side="left", fill="both", expand=True)
@@ -277,7 +332,11 @@ class App(tk.Tk):
             "  Set 'ChromeDriver path' in Settings only if auto-detection fails.\n\n"
             "WHERE THINGS ARE SAVED\n"
             f"  State/history files: {self.state_dir}\n"
-            "  They are local only and never uploaded.\n\n"
+            f"  UI settings: {self.state_dir / 'settings.json'} (restored on launch)\n"
+            "  They are local only and never uploaded.\n"
+            "  Use 'Reset settings to default' in Settings to start fresh.\n"
+            "  The History table can be sorted by any column heading, and\n"
+            "  'Clear table' deletes the saved rows for the selected task.\n\n"
             "DISCLAIMER\n"
             "  Browser automation may violate Instagram's Terms of Use and can\n"
             "  lead to temporary restrictions. Use at your own risk.\n\n"
@@ -287,6 +346,80 @@ class App(tk.Tk):
         widget.insert("1.0", text)
         widget.config(state="disabled")
         widget.pack(fill="both", expand=True)
+
+    # ------------------------------------------------------------ settings
+    def _settings_vars(self) -> dict[str, tk.Variable]:
+        return {
+            "mode": self.mode_var,
+            "file": self.file_var,
+            "profile": self.profile_var,
+            "cdp": self.cdp_var,
+            "driver": self.driver_var,
+            "random": self.random_var,
+            "dry": self.dry_var,
+            "headless": self.headless_var,
+            "restart": self.restart_var,
+            "retry": self.retry_var,
+            "limit": self.limit_var,
+            "min_delay": self.min_var,
+            "max_delay": self.max_var,
+            "like_chance": self.like_chance_var,
+            "dwell_min": self.dwell_min_var,
+            "dwell_max": self.dwell_max_var,
+            "skip_chance": self.skip_chance_var,
+            "story_min": self.story_min_var,
+            "story_max": self.story_max_var,
+            "watch_reels": self.watch_reels_var,
+            "watch_stories": self.watch_stories_var,
+            "history_mode": self.history_mode_var,
+            "search": self.search_var,
+            "status_filter": self.status_filter_var,
+        }
+
+    def _settings_changed(self, *_args) -> None:
+        self._save_settings()
+
+    def _save_settings(self) -> None:
+        data = {key: var.get() for key, var in self._settings_vars().items()}
+        try:
+            self.settings_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except OSError:
+            pass
+
+    def _load_settings(self) -> None:
+        if not self.settings_path.exists():
+            return
+        try:
+            data = json.loads(self.settings_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return
+        if not isinstance(data, dict):
+            return
+        for key, var in self._settings_vars().items():
+            if key in data:
+                try:
+                    var.set(data[key])
+                except (tk.TclError, ValueError):
+                    pass  # Ignore corrupt/outdated values in the saved file.
+
+    def _reset_settings(self) -> None:
+        if not messagebox.askyesno(
+            "Reset settings",
+            "Restore every setting to its default value?\n\n"
+            "This also clears the saved input file path and the search/filter "
+            "choices. Recorded task history is NOT deleted.",
+        ):
+            return
+        for key, var in self._settings_vars().items():
+            var.set(DEFAULT_SETTINGS[key])
+        self.usernames = []
+        self.warnings = []
+        self._render_preview()
+        self.file_info.config(text="No file loaded")
+        self._set_history_sort("time", reverse=True)
+        self._refresh_history()
+        self._save_settings()
+        self._log("Settings restored to defaults (history was kept).", "warn")
 
     # ------------------------------------------------------------- actions
     def _browse_input(self) -> None:
@@ -437,6 +570,34 @@ class App(tk.Tk):
         self._refresh_history()
         self._log("State file reset.", "warn")
 
+    def _set_history_sort(self, column: str, reverse: bool | None = None) -> None:
+        if column == self._sort_col and reverse is None:
+            self._sort_reverse = not self._sort_reverse
+        else:
+            self._sort_col = column
+            self._sort_reverse = bool(reverse)
+        self._update_history_headings()
+        self._refresh_history()
+
+    def _update_history_headings(self) -> None:
+        for col, label in self.history_headings.items():
+            marker = ""
+            if col == self._sort_col:
+                marker = " \u25bc" if self._sort_reverse else " \u25b2"
+            self.history_tree.heading(col, text=f"{label}{marker}")
+
+    def _clear_history_table(self) -> None:
+        mode = self.history_mode_var.get()
+        path = self._state_path(mode)
+        if not messagebox.askyesno(
+            "Clear table",
+            f"Delete every saved row for '{mode}' from\n{path}?\n\nThis cannot be undone.",
+        ):
+            return
+        StateStore(path).reset()
+        self._refresh_history()
+        self._log(f"Cleared the history table for {mode}.", "warn")
+
     def _refresh_history(self) -> None:
         mode = self.history_mode_var.get()
         path = self._state_path(mode)
@@ -452,12 +613,14 @@ class App(tk.Tk):
 
         query = self.search_var.get().strip().lower()
         status_filter = self.status_filter_var.get()
+        sort_key = "label" if self._sort_col == "status" else self._sort_col
+        rows = [row for row in rows
+                if (status_filter == "all" or row["status"] == status_filter)
+                and (not query or query in row["username"].lower() or query in row["detail"].lower())]
+        rows.sort(key=lambda row: str(row.get(sort_key, "")).lower(), reverse=self._sort_reverse)
+
         self.history_tree.delete(*self.history_tree.get_children())
         for row in rows:
-            if status_filter != "all" and row["status"] != status_filter:
-                continue
-            if query and query not in row["username"].lower() and query not in row["detail"].lower():
-                continue
             self.history_tree.insert("", "end", values=(
                 row["username"], row["label"], row["detail"], row["time"][:19].replace("T", " ")
             ))
@@ -486,6 +649,8 @@ class App(tk.Tk):
         self.resume_btn.config(state="normal" if state == "paused" else "disabled")
         self.stop_btn.config(state="normal" if state in {"running", "paused", "stopping"} else "disabled")
         self.reset_btn.config(state="normal" if state == "idle" else "disabled")
+        self.reset_settings_btn.config(state="normal" if state == "idle" else "disabled")
+        self.clear_table_btn.config(state="normal" if state == "idle" else "disabled")
         labels = {
             "idle": "idle", "running": "running", "paused": "paused",
             "stopping": "stopping...", "done": "finished",
@@ -536,6 +701,7 @@ class App(tk.Tk):
                 return
             self.engine.stop()
             self.engine.join(3)
+        self._save_settings()
         self.destroy()
 
 
