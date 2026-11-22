@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # Dry-run results and aborts must never count as finished work.
-UNHANDLED = {"would_cancel", "would_unfollow", "abort"}
+UNHANDLED = {"would_cancel", "would_unfollow", "would_like", "would_view", "abort"}
 RETRYABLE = {"error", "unavailable"}
 
 STATUS_LABELS = {
@@ -16,6 +16,10 @@ STATUS_LABELS = {
     "unfollowed": "Unfollowed",
     "would_cancel": "Pending - dry run",
     "would_unfollow": "Pending - dry run",
+    "would_like": "Would like - dry run",
+    "would_view": "Would watch - dry run",
+    "liked": "Liked",
+    "viewed": "Viewed (left unliked / watched story)",
     "following": "Request accepted - untouched",
     "follow": "No pending request - untouched",
     "follow_back": "Follows you - untouched",
