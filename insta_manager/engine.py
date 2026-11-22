@@ -391,13 +391,14 @@ class Engine:
         if allowed:
             self.emit("log", f"Only liking posts from {len(allowed)} loaded username(s).")
         seen: set[str] = set()
+        handled_here: set[str] = set()
         done = 0
-        idle_rounds = 0
-        reloads = 0
+        stagnant = 0
+        skipped = 0
         iterations = 0
-        max_iterations = cap * 3 + 40
-        while (done < cap and not self._stop.is_set() and idle_rounds < 8
-               and reloads < 4 and iterations < max_iterations):
+        max_iterations = cap * 6 + 80
+        while (done < cap and not self._stop.is_set() and stagnant < 15
+               and iterations < max_iterations):
             if not self._wait_while_paused() or not guard_ok():
                 break
             iterations += 1
@@ -409,9 +410,11 @@ class Engine:
                     break
                 author = post["author"]
                 seen.add(post["postId"])
-                if state.handled(author):
+                if state.handled(author) or author in handled_here:
+                    skipped += 1
                     continue
                 if allowed is not None and author not in allowed:
+                    skipped += 1
                     continue
                 self.emit("current", author, done + 1, cap)
                 kind = post.get("kind", "post")
@@ -436,29 +439,40 @@ class Engine:
                 else:
                     status, detail = "viewed", f"left unliked ({kind})"
                 record(author, status, detail)
+                handled_here.add(author)
                 done += 1
                 if random.random() < 0.08:
                     self._sleep(random.uniform(1.5, 3.0))
             if done == before_round:
-                # Posts may have been present but all were already in history /
-                # outside the allowlist. That is still a stalled round.
-                idle_rounds += 1
-                social.scroll_feed(driver, strong=idle_rounds >= 3)
-                self._sleep(random.uniform(1.2, 2.8))
-                if idle_rounds >= 4 and reloads < 4:
-                    self.emit("log", "Feed has no new posts - reloading home to fetch more...")
-                    driver.get("https://www.instagram.com/")
-                    self._sleep(2.5)
-                    if not guard_ok():
-                        break
-                    reloads += 1
-                    idle_rounds = 0
+                stagnant += 1
             else:
-                idle_rounds = 0
-                social.scroll_feed(driver)
-                self._sleep(random.uniform(1.0, 2.5))
+                stagnant = 0
+            if done >= cap or self._stop.is_set():
+                break
+
+            # Keep scrolling down. Reloading would return to the top and show
+            # only posts we have already seen, which was causing short runs.
+            social.scroll_feed(driver, strong=stagnant >= 6)
+            self._sleep(random.uniform(1.0, 2.2))
+            if stagnant:
+                # Instagram lazy-loads slowly; poll before calling it stalled.
+                for _ in range(3):
+                    if any(p.get("postId") and p.get("author") and p["postId"] not in seen
+                           for p in social.feed_posts(driver)):
+                        break
+                    self._sleep(0.8)
+            if iterations % 10 == 0:
+                self.emit(
+                    "log",
+                    f"Feed scan: checked {len(seen)} post(s), recorded {done}, "
+                    f"skipped {skipped} already-seen author(s); still scrolling...",
+                )
         if done < cap:
-            self.emit("log", f"Feed: no further new posts available after {done} item(s).")
+            self.emit(
+                "log",
+                f"Feed: stopped after scanning {len(seen)} post(s) "
+                f"without finding {cap - done} more new author(s).",
+            )
         return done
 
     def _reel_pass(self, driver, state, counts, cap, guard_ok, wait, record) -> int:
@@ -470,6 +484,7 @@ class Engine:
         self._sleep(3.0)
         done = 0
         stall = 0
+        handled_here: set[str] = set()
         for _ in range(cap):
             if self._stop.is_set() or not self._wait_while_paused() or not guard_ok():
                 break
@@ -479,7 +494,7 @@ class Engine:
                 self.emit("log", "No reel detected.")
                 break
             author = info.get("author") or "unknown_reel"
-            if state.handled(author):
+            if state.handled(author) or author in handled_here:
                 if not social.next_reel(driver):
                     break
                 self._sleep(random.uniform(0.6, 1.4))
@@ -511,6 +526,7 @@ class Engine:
             else:
                 status, detail = "viewed", "left unliked (reel)"
             record(author, status, detail)
+            handled_here.add(author)
             done += 1
             if not social.next_reel(driver):
                 break

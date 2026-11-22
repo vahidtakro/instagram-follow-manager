@@ -261,17 +261,19 @@ def wander_mouse(driver, steps: int | None = None) -> None:
 def scroll_feed(driver, strong: bool = False) -> None:
     """Scroll a variable amount, occasionally nudging back slightly.
 
-    strong=True pushes near the bottom to make Instagram lazy-load more posts.
+    strong=True goes to the real bottom so Instagram lazy-loads the next page.
+    It never jumps to a percentage of the document: that would skip posts.
     """
     try:
         if strong:
             driver.execute_script(
-                "window.scrollTo({top:document.body.scrollHeight*0.85,behavior:'smooth'});"
+                "var e=document.scrollingElement||document.documentElement;"
+                "window.scrollTo({top:e.scrollHeight,behavior:'smooth'});"
             )
             return
-        amount = random.randint(420, 900)
-        if random.random() < 0.15:
-            amount = -random.randint(120, 260)
+        amount = random.randint(700, 1400)
+        if random.random() < 0.12:
+            amount = -random.randint(150, 350)
         driver.execute_script(f"window.scrollBy({{top:{amount},left:0,behavior:'smooth'}});")
     except WebDriverException:
         pass
