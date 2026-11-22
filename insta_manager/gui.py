@@ -41,7 +41,6 @@ DEFAULT_SETTINGS = {
     "story_max": 9.0,
     "watch_reels": True,
     "watch_stories": False,
-    "log_side": "Right",
     "history_mode": "cancel",
     "search": "",
     "status_filter": "all",
@@ -85,7 +84,6 @@ class App(tk.Tk):
         self.story_max_var = tk.DoubleVar(value=DEFAULT_SETTINGS["story_max"])
         self.watch_reels_var = tk.BooleanVar(value=DEFAULT_SETTINGS["watch_reels"])
         self.watch_stories_var = tk.BooleanVar(value=DEFAULT_SETTINGS["watch_stories"])
-        self.log_side_var = tk.StringVar(value=DEFAULT_SETTINGS["log_side"])
         self.history_mode_var = tk.StringVar(value=DEFAULT_SETTINGS["history_mode"])
         self.search_var = tk.StringVar(value=DEFAULT_SETTINGS["search"])
         self.status_filter_var = tk.StringVar(value=DEFAULT_SETTINGS["status_filter"])
@@ -96,10 +94,8 @@ class App(tk.Tk):
         # Save on every change so settings survive a close, crash or quit.
         for var in self._settings_vars().values():
             var.trace_add("write", self._settings_changed)
-        self.log_side_var.trace_add("write", self._apply_log_layout)
 
         self._build()
-        self._apply_log_layout()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(120, self._poll_events)
         self._log("Ready. Load a .txt or .json file, review the list, then press Start.")
@@ -125,7 +121,7 @@ class App(tk.Tk):
         file_menu.add_command(label="Quit", command=self._on_close)
         menubar.add_cascade(label="File", menu=file_menu)
         help_menu = tk.Menu(menubar, tearoff=0)
-        help_menu.add_command(label="About / safety", command=lambda: self.notebook.select(2))
+        help_menu.add_command(label="About / safety", command=lambda: self.notebook.select(3))
         menubar.add_cascade(label="Help", menu=help_menu)
         self.config(menu=menubar)
 
@@ -134,21 +130,34 @@ class App(tk.Tk):
 
         self.run_tab = ttk.Frame(self.notebook)
         self.history_tab = ttk.Frame(self.notebook)
+        self.log_tab = ttk.Frame(self.notebook)
         self.about_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.run_tab, text="  Run  ")
         self.notebook.add(self.history_tab, text="  History  ")
+        self.notebook.add(self.log_tab, text="  Live Log  ")
         self.notebook.add(self.about_tab, text="  About / Safety  ")
 
         self._build_run_tab()
         self._build_history_tab()
+        self._build_log_tab()
         self._build_about_tab()
 
     def _build_run_tab(self) -> None:
-        self.run_paned = ttk.PanedWindow(self.run_tab, orient="horizontal")
-        self.run_paned.pack(fill="both", expand=True, padx=4, pady=4)
-        self.controls_panel = ttk.Frame(self.run_paned, padding=(4, 0))
-        self.log_frame = ttk.LabelFrame(self.run_paned, text="Live log", padding=4)
-        self.run_paned.add(self.controls_panel, weight=3)
+        # Scrollable Run tab: every setting stays reachable on small screens.
+        self.run_canvas = tk.Canvas(self.run_tab, highlightthickness=0)
+        run_scroll = ttk.Scrollbar(self.run_tab, orient="vertical", command=self.run_canvas.yview)
+        self.controls_panel = ttk.Frame(self.run_canvas, padding=(8, 4))
+        self._run_window = self.run_canvas.create_window(
+            (0, 0), window=self.controls_panel, anchor="nw"
+        )
+        self.controls_panel.bind("<Configure>", self._update_scrollregion)
+        self.run_canvas.bind("<Configure>", self._resize_run_panel)
+        self.run_canvas.configure(yscrollcommand=run_scroll.set)
+        self.run_canvas.pack(side="left", fill="both", expand=True)
+        run_scroll.pack(side="right", fill="y")
+        self.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.bind_all("<Button-4>", self._on_mousewheel)
+        self.bind_all("<Button-5>", self._on_mousewheel)
 
         top = ttk.LabelFrame(self.controls_panel, text="1. Task and input", padding=10)
         top.pack(fill="x", padx=8, pady=6)
@@ -212,12 +221,6 @@ class App(tk.Tk):
         ttk.Label(opts, text="Settings are saved automatically and restored on next launch.").grid(
             row=5, column=3, columnspan=3, sticky="w", pady=(8, 0)
         )
-        ttk.Label(opts, text="Live log side:").grid(row=6, column=0, sticky="w", pady=(6, 0))
-        ttk.Combobox(opts, textvariable=self.log_side_var, values=["Right", "Left"],
-                     state="readonly", width=10).grid(row=6, column=1, sticky="w", pady=(6, 0))
-        ttk.Label(opts, text="Drag the divider between the log and the controls to resize.").grid(
-            row=6, column=2, columnspan=4, sticky="w", pady=(6, 0)
-        )
         opts.columnconfigure(1, weight=1)
 
         social = ttk.LabelFrame(self.controls_panel, text="3. Human-paced behaviour (feed / reels / stories)", padding=10)
@@ -256,17 +259,6 @@ class App(tk.Tk):
         self.current_label.pack(side="right")
         self.progress = ttk.Progressbar(self.controls_panel, mode="determinate", maximum=100)
         self.progress.pack(fill="x", padx=8, pady=4)
-
-        # The log lives in its own pane so long runs never push it off-screen.
-        self.log_text = tk.Text(self.log_frame, height=12, wrap="word", font="TkFixedFont")
-        log_scroll = ttk.Scrollbar(self.log_frame, orient="vertical", command=self.log_text.yview)
-        self.log_text.config(yscrollcommand=log_scroll.set)
-        self.log_text.pack(side="left", fill="both", expand=True)
-        log_scroll.pack(side="right", fill="y")
-        self.log_text.tag_config("error", foreground="#c0392b")
-        self.log_text.tag_config("good", foreground="#1e8449")
-        self.log_text.tag_config("warn", foreground="#b9770e")
-        self.run_paned.add(self.log_frame, weight=1)
 
     def _build_history_tab(self) -> None:
         bar = ttk.Frame(self.history_tab)
@@ -311,6 +303,23 @@ class App(tk.Tk):
         self.history_tree.pack(side="left", fill="both", expand=True)
         tscroll.pack(side="right", fill="y")
 
+    def _build_log_tab(self) -> None:
+        toolbar = ttk.Frame(self.log_tab)
+        toolbar.pack(fill="x", padx=8, pady=(8, 4))
+        ttk.Label(toolbar, text="Activity from this session").pack(side="left")
+        ttk.Button(toolbar, text="Clear log", command=self._clear_log).pack(side="right")
+
+        frame = ttk.Frame(self.log_tab)
+        frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self.log_text = tk.Text(frame, height=20, wrap="word", font="TkFixedFont")
+        scroll = ttk.Scrollbar(frame, orient="vertical", command=self.log_text.yview)
+        self.log_text.config(yscrollcommand=scroll.set)
+        self.log_text.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        self.log_text.tag_config("error", foreground="#c0392b")
+        self.log_text.tag_config("good", foreground="#1e8449")
+        self.log_text.tag_config("warn", foreground="#b9770e")
+
     def _build_about_tab(self) -> None:
         text = (
             "INSTAGRAM FOLLOW MANAGER\n"
@@ -353,8 +362,8 @@ class App(tk.Tk):
             "  Use 'Reset settings to default' in Settings to start fresh.\n"
             "  The History table can be sorted by any column heading, and\n"
             "  'Clear table' deletes the saved rows for the selected task.\n"
-            "  Use 'Live log side' in Settings to put the log on the left or\n"
-            "  right; drag the divider between the panes to resize it.\n\n"
+            "  The Live Log has its own tab; use the scrollbar on the Run tab\n"
+            "  to reach settings on smaller screens.\n\n"
             "DISCLAIMER\n"
             "  Browser automation may violate Instagram's Terms of Use and can\n"
             "  lead to temporary restrictions. Use at your own risk.\n\n"
@@ -364,15 +373,6 @@ class App(tk.Tk):
         widget.insert("1.0", text)
         widget.config(state="disabled")
         widget.pack(fill="both", expand=True)
-
-    def _apply_log_layout(self, *_args) -> None:
-        """Place the live log in a left or right sidebar (never below the controls)."""
-        if not hasattr(self, "run_paned"):
-            return
-        if str(self.log_frame) in [str(child) for child in self.run_paned.panes()]:
-            self.run_paned.forget(self.log_frame)
-        position = 0 if self.log_side_var.get() == "Left" else "end"
-        self.run_paned.insert(position, self.log_frame, weight=1)
 
     # ------------------------------------------------------------ settings
     def _settings_vars(self) -> dict[str, tk.Variable]:
@@ -398,7 +398,6 @@ class App(tk.Tk):
             "story_max": self.story_max_var,
             "watch_reels": self.watch_reels_var,
             "watch_stories": self.watch_stories_var,
-            "log_side": self.log_side_var,
             "history_mode": self.history_mode_var,
             "search": self.search_var,
             "status_filter": self.status_filter_var,
@@ -670,6 +669,34 @@ class App(tk.Tk):
         self.log_text.insert("end", text + "\n", tag)
         self.log_text.see("end")
         self.log_text.config(state="disabled")
+
+    def _clear_log(self) -> None:
+        self.log_text.config(state="normal")
+        self.log_text.delete("1.0", "end")
+        self.log_text.config(state="disabled")
+
+    def _update_scrollregion(self, _event=None) -> None:
+        region = self.run_canvas.bbox("all")
+        if region:
+            self.run_canvas.configure(scrollregion=region)
+
+    def _resize_run_panel(self, _event=None) -> None:
+        width = self.run_canvas.winfo_width()
+        if width > 1:
+            self.run_canvas.itemconfigure(self._run_window, width=width)
+        self._update_scrollregion()
+
+    def _on_mousewheel(self, event) -> None:
+        # Only scroll the Run tab; other tabs have their own scrollbars.
+        if self.notebook.index(self.notebook.select()) != 0:
+            return
+        number = getattr(event, "num", 0)
+        if number == 4:
+            self.run_canvas.yview_scroll(-1, "units")
+        elif number == 5:
+            self.run_canvas.yview_scroll(1, "units")
+        elif getattr(event, "delta", 0):
+            self.run_canvas.yview_scroll(-int(event.delta / 120), "units")
 
     def _set_controls(self, state: str) -> None:
         self.start_btn.config(state="normal" if state == "idle" else "disabled")
