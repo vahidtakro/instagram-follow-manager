@@ -1,0 +1,5 @@
+# One username per line. Blank lines and comments are ignored.
+# You can also paste @username or a full https://instagram.com/username/ URL.
+example_user_one
+@example_user_two
+https://www.instagram.com/example.user3/

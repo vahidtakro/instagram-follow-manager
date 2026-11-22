@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Local state/history (contains real usernames - never commit)
+*.state.json
+*_state.json
+state/
+data/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Screenshots
+*.png
+!docs/*.png

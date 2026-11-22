@@ -1,0 +1,20 @@
+[
+  {
+    "timestamp": 1700000000,
+    "media": [],
+    "label_values": [
+      { "label": "URL", "value": "" },
+      { "label": "Name", "value": "Example Name" },
+      { "label": "Username", "value": "example_user_one" }
+    ]
+  },
+  {
+    "timestamp": 1700000001,
+    "media": [],
+    "label_values": [
+      { "label": "URL", "value": "" },
+      { "label": "Name", "value": "" },
+      { "label": "Username", "value": "example_user_two" }
+    ]
+  }
+]
