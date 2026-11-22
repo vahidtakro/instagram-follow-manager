@@ -308,51 +308,67 @@ class Engine:
         self._sleep(2.0)
         if not guard_ok():
             return 0
-        users = social.story_users(driver)
-        random.shuffle(users)  # don't always start with the same person
-        if not users:
-            self.emit("log", "No stories available right now.")
-            return 0
-        self.emit("log", f"Found {len(users)} story author(s).")
         done = 0
-        for user in users:
-            if done >= cap or self._stop.is_set() or not self._wait_while_paused():
+        seen_authors: set[str] = set()
+        refreshes = 0
+        iterations = 0
+        max_iterations = cap * 4 + 20
+
+        while done < cap and refreshes < cap * 2 + 5 and iterations < max_iterations:
+            if self._stop.is_set() or not self._wait_while_paused():
                 break
-            if not social.open_story(driver, user):
-                continue
-            self._sleep(1.0)
+            iterations += 1
+
             if not social.story_open(driver):
-                continue
-            for _ in range(10):  # safety cap per author
-                if done >= cap or self._stop.is_set() or not self._wait_while_paused():
-                    break
-                if not social.story_open(driver) or not guard_ok():
-                    break
-                author = social.story_author(driver) or user
-                if state.handled(author):
-                    if not social.story_next(driver):
-                        break
-                    continue
-                self.emit("current", author, done + 1, cap)
-                if random.random() < opt.skip_chance / 100.0:
-                    low, high = opt.story_min * 0.15, opt.story_max * 0.4
-                    label = "skipping"
-                else:
-                    low, high = opt.story_min, opt.story_max
-                    label = "watching"
-                self.emit("log", f"  story @{author}: {label}")
-                if opt.apply:
-                    social.wander_mouse(driver)
-                if not wait(low, high):
-                    break
+                # Instagram replaces the tray as stories are consumed, so re-read it.
+                driver.get("https://www.instagram.com/")
+                self._sleep(1.8)
                 if not guard_ok():
                     break
-                record(author, "viewed" if opt.apply else "would_view", label)
-                done += 1
-                if not social.story_next(driver):
+                users = [u for u in social.story_users(driver) if u not in seen_authors]
+                if not users:
+                    self.emit("log", "No more unseen stories available right now.")
                     break
-            social.story_close(driver)
-            self._sleep(random.uniform(0.6, 1.6))
+                user = random.choice(users)
+                self.emit("log", f"Opening stories from @{user} ({len(users)} author(s) available).")
+                if not social.open_story(driver, user):
+                    seen_authors.add(user)
+                    continue
+                self._sleep(1.2)
+                refreshes += 1
+                if not social.story_open(driver):
+                    continue
+
+            if not guard_ok():
+                break
+            author = social.story_author(driver) or "unknown_story"
+            if state.handled(author):
+                seen_authors.add(author)
+                if not social.story_next(driver):
+                    social.story_close(driver)
+                continue
+
+            self.emit("current", author, done + 1, cap)
+            if random.random() < opt.skip_chance / 100.0:
+                low, high = opt.story_min * 0.15, opt.story_max * 0.4
+                label = "skipping"
+            else:
+                low, high = opt.story_min, opt.story_max
+                label = "watching"
+            self.emit("log", f"  story @{author}: {label}")
+            if opt.apply:
+                social.wander_mouse(driver)
+            if not wait(low, high):
+                break
+            if not guard_ok():
+                break
+            record(author, "viewed" if opt.apply else "would_view", label)
+            seen_authors.add(author)
+            done += 1
+            if not social.story_next(driver):
+                social.story_close(driver)
+                self._sleep(random.uniform(0.8, 1.6))
+        social.story_close(driver)
         return done
 
     def _feed_pass(self, driver, state, counts, cap, guard_ok, wait, record) -> int:

@@ -44,7 +44,7 @@ Download the `.deb` from the [Releases](https://github.com/vahidtakro/instagram-
 git clone https://github.com/vahidtakro/instagram-follow-manager.git
 cd instagram-follow-manager
 bash packaging/build_deb.sh
-sudo apt install ./dist/instagram-follow-manager_1.1.0_all.deb
+sudo apt install ./dist/instagram-follow-manager_1.1.1_all.deb
 ```
 
 This creates an **Instagram Follow Manager** entry in your applications menu, plus two commands:
@@ -175,7 +175,8 @@ legacy/                     original standalone scripts
 
 - Instagram rate-limits follow/unfollow actions aggressively. Defaults are 20 per run with 25–45s delays for cancelling, and 15 per run with 45–75s delays for unfollowing. Expect to spread several hundred accounts over multiple days.
 - **Random delay (jitter) is on by default.** Each wait is drawn randomly between "Delay from" and "to". If you enter only one number (or set both equal), the app still adds ±30% jitter so the timing never looks mechanical. Uncheck **Random delay** (or pass `--fixed-delay`) only if you deliberately want an exact wait.
-- Likes are also rate-limited. Keep **Like chance** modest (20–40%) and batches small (8–15). The app deliberately like only a fraction of what you see.
+- **The batch size is editable.** The **Max items this run** field (default 50 for social tasks, 20/15 for the cleanup tasks) is a per-run target, not a hard cap — set it to 100, 200 or more if you want. In the CLI use `--limit N`. Likes are still rate-limited: keep **Like chance** modest (20–40%) and grow batches gradually.
+- Instagram swaps the story tray as stories are consumed. The watcher re-reads it when the viewer closes, so it can keep going past one person's stories instead of stopping early.
 - The social modes store one entry per author, so an author is never engaged twice until you reset that task's state. That also means re-running a social task mostly does nothing until you reset or switch task.
 - If a run stops with `abort`, that username is not marked done — it will be retried on the next run.
 - Use **Retry errors / unavailable** to re-check entries that failed or looked disabled.

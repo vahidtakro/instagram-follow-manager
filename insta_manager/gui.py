@@ -107,7 +107,7 @@ class App(tk.Tk):
             top, textvariable=self.mode_var, values=list(MODES), state="readonly", width=38
         )
         mode_combo.grid(row=0, column=1, sticky="w", padx=6)
-        mode_combo.bind("<<ComboboxSelected>>", lambda _: self._refresh_history())
+        mode_combo.bind("<<ComboboxSelected>>", self._on_mode_change)
         ttk.Label(top, text="(both tasks accept .txt, .json or .csv)").grid(row=0, column=2, sticky="w")
 
         ttk.Label(top, text="Input file:").grid(row=1, column=0, sticky="w", pady=(8, 0))
@@ -140,8 +140,8 @@ class App(tk.Tk):
         ttk.Checkbutton(opts, text="Retry errors / unavailable", variable=self.retry_var).grid(row=0, column=3, sticky="w")
         ttk.Checkbutton(opts, text="Random delay (jitter)", variable=self.random_var).grid(row=0, column=4, sticky="w")
 
-        ttk.Label(opts, text="Batch limit:").grid(row=1, column=0, sticky="w", pady=(8, 0))
-        ttk.Spinbox(opts, from_=1, to=500, textvariable=self.limit_var, width=8).grid(row=1, column=1, sticky="w", pady=(8, 0))
+        ttk.Label(opts, text="Max items this run:").grid(row=1, column=0, sticky="w", pady=(8, 0))
+        ttk.Spinbox(opts, from_=1, to=2000, textvariable=self.limit_var, width=8).grid(row=1, column=1, sticky="w", pady=(8, 0))
         ttk.Label(opts, text="Delay from (s):").grid(row=1, column=2, sticky="w", pady=(8, 0))
         ttk.Spinbox(opts, from_=0, to=600, increment=5, textvariable=self.min_var, width=8).grid(row=1, column=3, sticky="w", pady=(8, 0))
         ttk.Label(opts, text="to (s):").grid(row=1, column=4, sticky="w", pady=(8, 0))
@@ -357,6 +357,14 @@ class App(tk.Tk):
                 subprocess.run(["xdg-open", target], check=False)
         except Exception as exc:  # noqa: BLE001
             messagebox.showinfo("History folder", f"Open this folder manually:\n{target}\n\n{exc}")
+
+    def _on_mode_change(self, _event=None) -> None:
+        """Give each task a sensible batch size, but let the user override it."""
+        defaults = {"cancel": 20, "unfollow": 15, "engage": 50, "stories": 50}
+        value = defaults.get(self.mode_var.get(), 20)
+        self.limit_var.set(value)
+        self._log(f"Batch size set to {value} for this task (edit 'Max items this run' to change).")
+        self._refresh_history()
 
     def _runtime_options(self) -> Options:
         return Options(
