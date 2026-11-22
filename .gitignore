@@ -11,6 +11,10 @@ venv/
 state/
 data/
 
+# Build output
+dist/
+packaging/deb/
+
 # OS / editor
 .DS_Store
 .idea/

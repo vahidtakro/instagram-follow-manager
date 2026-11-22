@@ -32,27 +32,42 @@ Run `python app.py` and see it live. The GUI has three tabs: **Run**, **History*
 
 ## Installation
 
-Requirements:
+### Recommended: install the Linux desktop app (Debian / Ubuntu)
 
-- Linux with an X display (or use headless mode)
-- Python 3.10+
-- Google Chrome, logged into your Instagram account
+Download the `.deb` from the [Releases](https://github.com/vahidtakro/instagram-follow-manager/releases) page, or build it from source:
 
 ```bash
 git clone https://github.com/vahidtakro/instagram-follow-manager.git
 cd instagram-follow-manager
+bash packaging/build_deb.sh
+sudo apt install ./dist/instagram-follow-manager_1.0.0_all.deb
+```
+
+This creates an **Instagram Follow Manager** entry in your applications menu, plus two commands:
+
+```bash
+instagram-follow-manager        # GUI
+instagram-follow-manager-cli    # CLI
+```
+
+The package installs its Python dependencies via apt. You still need **Google Chrome installed and logged into Instagram**; Selenium downloads a matching ChromeDriver automatically on first launch (needs internet once).
+
+### Run from source (any distro)
+
+```bash
+git clone https://github.com/vahidtakro/instagram-follow-manager.git
+cd instagram-follow-manager
+
+# Debian/Ubuntu first:
+sudo apt install python3-venv python3-tk
+
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+python app.py
 ```
 
-On Debian/Ubuntu, if the GUI fails with `No module named tkinter`:
-
-```bash
-sudo apt install python3-tk
-```
-
-Selenium downloads a matching ChromeDriver automatically on first launch (needs internet once).
+On Fedora/RHEL use `sudo dnf install python3-tkinter` instead. If `python3 -m venv` complains about missing `ensurepip`, install `python3-venv` (Debian/Ubuntu) or `python3-pip` first, then recreate the folder.
 
 ## Usage
 
