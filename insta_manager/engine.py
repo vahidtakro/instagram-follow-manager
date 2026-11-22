@@ -34,6 +34,8 @@ class Options:
     headless: bool = False
     restart_chrome: bool = False
     retry_errors: bool = False
+    driver_path: str = ""
+    random_delay: bool = True
 
 
 @dataclass
@@ -147,6 +149,7 @@ class Engine:
             driver = make_driver(
                 opt.profile, opt.cdp or None, opt.headless, opt.restart_chrome,
                 lambda kind, *args: self.emit(kind, *args),
+                driver_path=opt.driver_path or None,
             )
             driver.get("https://www.instagram.com/")
             time.sleep(2)
@@ -180,8 +183,17 @@ class Engine:
                     break
 
                 if index < total:
-                    pause = random.uniform(opt.min_delay, opt.max_delay)
-                    self.emit("log", f"  waiting {pause:.0f}s")
+                    if opt.random_delay:
+                        low, high = opt.min_delay, opt.max_delay
+                        if high <= low:
+                            # A single entered value still gets natural jitter.
+                            spread = max(2.0, low * 0.3)
+                            low, high = max(0.0, low - spread), high + spread
+                        pause = random.uniform(low, high)
+                        self.emit("log", f"  waiting {pause:.0f}s (random {low:.0f}-{high:.0f}s)")
+                    else:
+                        pause = opt.min_delay
+                        self.emit("log", f"  waiting {pause:.0f}s (fixed)")
                     if not self._sleep(pause):
                         break
         except Exception as exc:  # noqa: BLE001 - surface any failure to the GUI

@@ -29,6 +29,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--headless", action="store_true")
     p.add_argument("--restart-chrome", action="store_true")
     p.add_argument("--retry-errors", action="store_true")
+    p.add_argument("--driver-path", default="", help="explicit ChromeDriver path (auto-detected if blank)")
+    p.add_argument("--fixed-delay", action="store_true",
+                   help="use the 'from' delay exactly instead of a random jitter")
     p.add_argument("--reset-state", action="store_true")
     p.add_argument("--state", help="override state file path")
     return p
@@ -60,6 +63,8 @@ def main() -> int:
         headless=args.headless,
         restart_chrome=args.restart_chrome,
         retry_errors=args.retry_errors,
+        driver_path=args.driver_path,
+        random_delay=not args.fixed_delay,
     )
     engine = Engine(options, StateStore(state_path), usernames)
     engine.start()

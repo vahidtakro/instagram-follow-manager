@@ -36,6 +36,8 @@ class App(tk.Tk):
         self.file_var = tk.StringVar()
         self.profile_var = tk.StringVar(value=str(Path.home() / ".config" / "chrome-instagram"))
         self.cdp_var = tk.StringVar()
+        self.driver_var = tk.StringVar()
+        self.random_var = tk.BooleanVar(value=True)
         self.dry_var = tk.BooleanVar(value=True)
         self.headless_var = tk.BooleanVar(value=False)
         self.restart_var = tk.BooleanVar(value=True)
@@ -127,12 +129,13 @@ class App(tk.Tk):
         ttk.Checkbutton(opts, text="Headless Chrome", variable=self.headless_var).grid(row=0, column=1, sticky="w")
         ttk.Checkbutton(opts, text="Restart Chrome if in use", variable=self.restart_var).grid(row=0, column=2, sticky="w")
         ttk.Checkbutton(opts, text="Retry errors / unavailable", variable=self.retry_var).grid(row=0, column=3, sticky="w")
+        ttk.Checkbutton(opts, text="Random delay (jitter)", variable=self.random_var).grid(row=0, column=4, sticky="w")
 
         ttk.Label(opts, text="Batch limit:").grid(row=1, column=0, sticky="w", pady=(8, 0))
         ttk.Spinbox(opts, from_=1, to=500, textvariable=self.limit_var, width=8).grid(row=1, column=1, sticky="w", pady=(8, 0))
-        ttk.Label(opts, text="Delay min (s):").grid(row=1, column=2, sticky="w", pady=(8, 0))
+        ttk.Label(opts, text="Delay from (s):").grid(row=1, column=2, sticky="w", pady=(8, 0))
         ttk.Spinbox(opts, from_=0, to=600, increment=5, textvariable=self.min_var, width=8).grid(row=1, column=3, sticky="w", pady=(8, 0))
-        ttk.Label(opts, text="Delay max (s):").grid(row=1, column=4, sticky="w", pady=(8, 0))
+        ttk.Label(opts, text="to (s):").grid(row=1, column=4, sticky="w", pady=(8, 0))
         ttk.Spinbox(opts, from_=0, to=600, increment=5, textvariable=self.max_var, width=8).grid(row=1, column=5, sticky="w", pady=(8, 0))
 
         ttk.Label(opts, text="Chrome profile:").grid(row=2, column=0, sticky="w", pady=(8, 0))
@@ -140,6 +143,8 @@ class App(tk.Tk):
         ttk.Button(opts, text="Browse...", command=self._browse_profile).grid(row=2, column=4, padx=4, pady=(8, 0))
         ttk.Label(opts, text="CDP host:port (optional):").grid(row=3, column=0, sticky="w", pady=(6, 0))
         ttk.Entry(opts, textvariable=self.cdp_var, width=22).grid(row=3, column=1, sticky="w", pady=(6, 0))
+        ttk.Label(opts, text="ChromeDriver path (auto if blank):").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        ttk.Entry(opts, textvariable=self.driver_var, width=58).grid(row=4, column=1, columnspan=3, sticky="ew", pady=(6, 0))
         opts.columnconfigure(1, weight=1)
 
         controls = ttk.LabelFrame(self.run_tab, text="3. Control", padding=10)
@@ -227,7 +232,12 @@ class App(tk.Tk):
             "  - Pause / Continue / Stop are available while a batch is running.\n"
             "  - If an action's result is uncertain it is never retried automatically.\n"
             "  - Instagram rate-limits these actions. Keep the default delays and\n"
-            "    work in small batches over several days.\n\n"
+            "    work in small batches over several days.\n"
+            "  - Random delay is ON: each wait varies between the two delay values.\n"
+            "    One value alone still gets +/-30% jitter. Uncheck it for a fixed wait.\n\n"
+            "CHROMEDRIVER\n"
+            "  Detected automatically (explicit path, Selenium cache, then PATH).\n"
+            "  Set 'ChromeDriver path' in Settings only if auto-detection fails.\n\n"
             "WHERE THINGS ARE SAVED\n"
             f"  State/history files: {self.state_dir}\n"
             "  They are local only and never uploaded.\n\n"
@@ -323,6 +333,8 @@ class App(tk.Tk):
             headless=self.headless_var.get(),
             restart_chrome=self.restart_var.get(),
             retry_errors=self.retry_var.get(),
+            driver_path=self.driver_var.get().strip(),
+            random_delay=self.random_var.get(),
         )
 
     def _start(self) -> None:
@@ -330,9 +342,6 @@ class App(tk.Tk):
             messagebox.showwarning("No usernames", "Load an input file first.")
             return
         opt = self._runtime_options()
-        if opt.min_delay > opt.max_delay:
-            messagebox.showwarning("Delay", "Minimum delay cannot be greater than maximum delay.")
-            return
         if not opt.apply and not messagebox.askyesno(
             "Dry run", "Dry run is ON: nothing will be clicked. Continue?"
         ):

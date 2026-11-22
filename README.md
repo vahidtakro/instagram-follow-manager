@@ -23,7 +23,7 @@ It drives a Chrome window you are already logged into. It never asks for your pa
   - Detects login walls, security checks, and action blocks and stops immediately.
   - A click whose result can't be verified is recorded as `unverified` and **never retried automatically** (a second click can send a new request / re-follow).
   - Deleted/disabled accounts are recognised quickly and skipped.
-- **Configurable** — batch size, min/max delay, Chrome profile path, headless mode, CDP attach, retries.
+- **Configurable** — batch size, random delay range (or a fixed delay), Chrome profile path, ChromeDriver path, headless mode, CDP attach, retries.
 - **Works in the terminal too** — same engine, exposed through `cli.py`.
 
 ## Screenshots
@@ -40,7 +40,7 @@ Download the `.deb` from the [Releases](https://github.com/vahidtakro/instagram-
 git clone https://github.com/vahidtakro/instagram-follow-manager.git
 cd instagram-follow-manager
 bash packaging/build_deb.sh
-sudo apt install ./dist/instagram-follow-manager_1.0.0_all.deb
+sudo apt install ./dist/instagram-follow-manager_1.0.1_all.deb
 ```
 
 This creates an **Instagram Follow Manager** entry in your applications menu, plus two commands:
@@ -50,7 +50,9 @@ instagram-follow-manager        # GUI
 instagram-follow-manager-cli    # CLI
 ```
 
-The package installs its Python dependencies via apt. You still need **Google Chrome installed and logged into Instagram**; Selenium downloads a matching ChromeDriver automatically on first launch (needs internet once).
+The package installs its Python dependencies via apt. You still need **Google Chrome installed and logged into Instagram**.
+
+ChromeDriver is located automatically: the app checks an explicit path (the **ChromeDriver path** field in Settings, or `--driver-path` on the CLI), then Selenium's cache, then `chromedriver` on your PATH (provided by the package's `chromium-chromedriver` dependency). If none is found it falls back to Selenium Manager, which needs internet once. On a fresh install the apt dependency supplies a working driver, so no manual setup is needed.
 
 ### Run from source (any distro)
 
@@ -156,6 +158,7 @@ legacy/                     original standalone scripts
 ## Tips
 
 - Instagram rate-limits follow/unfollow actions aggressively. Defaults are 20 per run with 25–45s delays for cancelling, and 15 per run with 45–75s delays for unfollowing. Expect to spread several hundred accounts over multiple days.
+- **Random delay (jitter) is on by default.** Each wait is drawn randomly between "Delay from" and "to". If you enter only one number (or set both equal), the app still adds ±30% jitter so the timing never looks mechanical. Uncheck **Random delay** (or pass `--fixed-delay`) only if you deliberately want an exact wait.
 - If a run stops with `abort`, that username is not marked done — it will be retried on the next run.
 - Use **Retry errors / unavailable** to re-check entries that failed or looked disabled.
 - Clear a task's history with **Reset state** in the GUI or `--reset-state` in the CLI.

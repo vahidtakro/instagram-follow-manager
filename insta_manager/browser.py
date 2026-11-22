@@ -10,6 +10,7 @@ import ctypes
 import ctypes.util
 import os
 import re
+import shutil
 import signal
 import time
 from pathlib import Path
@@ -261,8 +262,36 @@ def terminate_chrome(pids: list[int], emit=None) -> None:
         time.sleep(0.25)
 
 
+def find_chromedriver(explicit: str | None = None) -> str | None:
+    """Locate a usable ChromeDriver.
+
+    Debian/Ubuntu's python3-selenium does not ship the Selenium Manager binary,
+    so webdriver.Chrome() alone raises NoSuchDriverException.  Prefer an
+    explicitly configured path, then Selenium's own cache, then PATH.
+    """
+    candidates: list[Path] = []
+    if explicit:
+        candidates.append(Path(explicit).expanduser())
+    cache = Path.home() / ".cache" / "selenium" / "chromedriver"
+    if cache.exists():
+        # prefer the newest version directory
+        drivers = [p for p in cache.glob("**/chromedriver") if p.is_file()]
+        drivers.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        candidates.extend(drivers)
+    found = shutil.which("chromedriver")
+    if found:
+        candidates.append(Path(found))
+    for candidate in candidates:
+        try:
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
+        except OSError:
+            continue
+    return None
+
+
 def make_driver(profile: str | Path, cdp: str | None = None, headless: bool = False,
-                restart_chrome: bool = False, emit=None):
+                restart_chrome: bool = False, emit=None, driver_path: str | None = None):
     """Start (or attach to) Chrome and return a WebDriver instance."""
     from selenium import webdriver  # imported lazily so GUI can start even if missing
 
@@ -308,7 +337,16 @@ def make_driver(profile: str | Path, cdp: str | None = None, headless: bool = Fa
             emit("log", f"Launching Chrome with profile {path}")
 
     opts.set_capability("pageLoadStrategy", "normal")
-    driver = webdriver.Chrome(options=opts)
+    resolved = find_chromedriver(driver_path)
+    if resolved:
+        from selenium.webdriver.chrome.service import Service
+
+        if emit:
+            emit("log", f"Using ChromeDriver: {resolved}")
+        driver = webdriver.Chrome(service=Service(executable_path=resolved), options=opts)
+    else:
+        # Last resort: let Selenium Manager try to download a matching driver.
+        driver = webdriver.Chrome(options=opts)
     driver.set_page_load_timeout(30)
     return driver
 
