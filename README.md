@@ -44,7 +44,7 @@ Download the `.deb` from the [Releases](https://github.com/vahidtakro/instagram-
 git clone https://github.com/vahidtakro/instagram-follow-manager.git
 cd instagram-follow-manager
 bash packaging/build_deb.sh
-sudo apt install ./dist/instagram-follow-manager_1.1.6_all.deb
+sudo apt install ./dist/instagram-follow-manager_1.1.7_all.deb
 ```
 
 This creates an **Instagram Follow Manager** entry in your applications menu, plus two commands:
@@ -92,7 +92,7 @@ python app.py
 
 Settings are saved automatically and restored the next time you open the app. **Reset settings to default** (in the Settings box) restores every field to its starting value; it does not delete task history. The **Run** tab has its own vertical scrollbar, so all settings remain reachable on a small screen. The **Live Log** now has its own tab (with a Clear log button). In the **History** tab you can click any column heading to sort by it, and **Clear table** deletes all saved rows for the selected task after confirmation.
 
-The **Engage** task visits the home feed first, then (optionally) reels. It spends a variable time on each post, likes only a percentage, scrolls irregularly and moves the mouse occasionally. **Watch stories** picks authors in random order, skips some stories early and watches others for a random duration, then moves to the next person when their stories end.
+The **Engage** task visits the home feed first, then (optionally) reels. It spends a variable time on each post, likes only a percentage, scrolls irregularly and moves the mouse occasionally. If Instagram says you're all caught up or starts showing suggested posts from accounts you don't follow, it switches to the **older posts** feed and skips suggested posts instead of liking them. **Watch stories** picks authors in random order, skips some stories early and watches others for a random duration, then moves to the next person when their stories end.
 
 If Chrome is already running with your profile, leave **Restart Chrome if in use** enabled (it will close and reopen Chrome with the same profile, so you stay logged in), or launch Chrome yourself with `--remote-debugging-port=9222` and enter `127.0.0.1:9222` in **CDP host:port**.
 

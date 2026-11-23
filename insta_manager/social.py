@@ -28,10 +28,23 @@ return (function(){
     var like=a.querySelector("svg[aria-label='Like'],svg[aria-label='Unlike']");
     var kind='post';
     if(a.querySelector('video')) kind='video';
-    out.push({index:i, author:author, postId:postId, kind:kind,
+    var suggested=false;
+    var btns=a.querySelectorAll("button,[role='button'],a");
+    for(var k=0;k<btns.length;k++){
+      var label=(btns[k].innerText||btns[k].textContent||'').trim();
+      if(label==='Follow'){ suggested=true; break; }
+    }
+    out.push({index:i, author:author, postId:postId, kind:kind, suggested:suggested,
               liked:!!like && like.getAttribute('aria-label')==='Unlike'});
   }
   return out;
+})()
+"""
+
+JS_CAUGHT_UP = r"""
+return (function(){
+  var t=document.body ? (document.body.innerText||'') : '';
+  return /you'?re all caught up|seen all new posts/i.test(t);
 })()
 """
 
@@ -193,6 +206,11 @@ def _js(driver, script: str, default=None):
 
 def feed_posts(driver) -> list[dict]:
     return _js(driver, JS_FEED_POSTS, []) or []
+
+
+def feed_caught_up(driver) -> bool:
+    """True when Instagram shows the 'You're all caught up' feed message."""
+    return bool(_js(driver, JS_CAUGHT_UP, False))
 
 
 def click_article_like(driver, index: int) -> str | None:

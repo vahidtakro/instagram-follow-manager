@@ -395,6 +395,8 @@ class Engine:
         done = 0
         stagnant = 0
         skipped = 0
+        suggested_skipped = 0
+        older_clicks = 0
         iterations = 0
         max_iterations = cap * 6 + 80
         while (done < cap and not self._stop.is_set() and stagnant < 15
@@ -402,7 +404,24 @@ class Engine:
             if not self._wait_while_paused() or not guard_ok():
                 break
             iterations += 1
-            posts = [p for p in social.feed_posts(driver)
+            all_posts = social.feed_posts(driver)
+            suggested_present = any(p.get("suggested") for p in all_posts)
+            # Once Instagram says "all caught up" or starts inserting suggested
+            # posts from accounts the user does not follow, switch to the older
+            # posts feed, which is made up of accounts they do follow.
+            if (older_clicks < 3 and (social.feed_caught_up(driver) or suggested_present)
+                    and "variant=past_posts" not in (driver.current_url or "")):
+                older_clicks += 1
+                self.emit(
+                    "log",
+                    "Suggested posts detected - loading older posts from people you follow...",
+                )
+                driver.get("https://www.instagram.com/?variant=past_posts")
+                self._sleep(3.0)
+                if not guard_ok():
+                    break
+                continue
+            posts = [p for p in all_posts
                      if p.get("postId") and p.get("author") and p["postId"] not in seen]
             before_round = done
             for post in posts:
@@ -410,6 +429,14 @@ class Engine:
                     break
                 author = post["author"]
                 seen.add(post["postId"])
+                if post.get("suggested"):
+                    suggested_skipped += 1
+                    if suggested_skipped <= 5:
+                        self.emit(
+                            "log",
+                            f"  skipping suggested post by @{author} (not someone you follow)",
+                        )
+                    continue
                 if state.handled(author) or author in handled_here:
                     skipped += 1
                     continue
@@ -465,13 +492,15 @@ class Engine:
                 self.emit(
                     "log",
                     f"Feed scan: checked {len(seen)} post(s), recorded {done}, "
-                    f"skipped {skipped} already-seen author(s); still scrolling...",
+                    f"skipped {skipped} already-seen and {suggested_skipped} suggested "
+                    "post(s); still scrolling...",
                 )
         if done < cap:
             self.emit(
                 "log",
                 f"Feed: stopped after scanning {len(seen)} post(s) "
-                f"without finding {cap - done} more new author(s).",
+                f"({suggested_skipped} suggested were skipped) without finding "
+                f"{cap - done} more new author(s).",
             )
         return done
 
